@@ -1,3 +1,4 @@
+# Copyright 2026 WWT
 FROM golang:alpine as builder
 
 # get deps ca-certs and git

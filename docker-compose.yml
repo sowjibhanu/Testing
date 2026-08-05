@@ -1,3 +1,4 @@
+# Copyright 2026 WWT
 version: '3'
 services:
   baton:
