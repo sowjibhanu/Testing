@@ -1,3 +1,4 @@
+<!-- Author: sowji -->
 # Aine Forge Starter
 
 Monorepo with a Next.js frontend and a long-running orchestrator service, communicating through PostgreSQL job tables with LISTEN/NOTIFY.
