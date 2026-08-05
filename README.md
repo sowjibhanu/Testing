@@ -1,144 +1,120 @@
-# Aine Forge Starter
+# Baton
 
-Monorepo with a Next.js frontend and a long-running orchestrator service, communicating through PostgreSQL job tables with LISTEN/NOTIFY.
+Baton is a load testing tool written in Go. It currently supports GET, POST, PUT, and DELETE requests. 
 
-## Standup app
+[![Build Status](https://travis-ci.org/americanexpress/baton.svg?branch=master)](https://travis-ci.org/americanexpress/baton)
 
-The frontend is an async team standup: sign in with a GitHub personal access token, post
-yesterday / today / blockers, read the team feed, work the blocker board, and generate a
-weekly AI summary. Updates live in PostgreSQL; the summary and the "draft from my GitHub
-activity" button are queued as jobs and answered by the orchestrator via Bedrock.
+## Install Baton
 
-Set `SESSION_SECRET` (see `.env.example`) — it encrypts the session cookie that holds the PAT.
+Installation of Baton with Go is as easy as running `go get`.
 
-## Structure
-
-```
-apps/
-  forge-fe/              ← Next.js 16 frontend (port 3000 / Lambda)
-  forge-orchestrator/    ← Fastify job processor (port 3001 / EC2 Docker)
-packages/
-  db/                    ← Prisma schema, migrations, shared pool + types
-.github/workflows/
-  deploy.yml             ← Build + deploy on every push (branch deploys)
-  cleanup.yml            ← Destroy branch envs on delete + nightly sweep
+```sh
+$ go get -u github.com/americanexpress/baton
 ```
 
-## Tech Stack
+Binary releases are [available](https://github.com/americanexpress/baton/releases).
 
-- **Next.js 16** — App Router, TypeScript, Tailwind CSS 4
-- **Fastify** — Orchestrator HTTP + health check
-- **PostgreSQL** — Job queue via LISTEN/NOTIFY
-- **Prisma** — Schema management + migrations
-- **Jest** — Unit testing
-- **npm workspaces** — Monorepo management
+## Using Baton
 
-## Deployment Architecture
+Baton currently supports the following options:
 
-- **FE** → Lambda (container image via `aws-lambda-web-adapter`)
-- **Orchestrator** → Docker containers on a shared EC2 instance
-- **Database** → Single RDS PostgreSQL, per-branch `CREATE DATABASE`
-- **Service registry** → DynamoDB maps branch → port, status, DB name
-- **CI/CD** → GitHub Actions with OIDC auth (no stored AWS keys)
-- **Branch deploys** → Each branch gets its own Lambda, orchestrator container, and database
-- **Auto-sleep** → Idle orchestrators stopped after 5 min, woken on demand
+```
+  -b string
+    	Body (use instead of -f)
+  -c int
+    	Number of concurrent requests (default 1)
+  -f string
+    	File path to file to be used as the body (use instead of -b)
+  -i	Ignore TLS/SSL certificate validation
+  -m string
+    	HTTP Method (GET,POST,PUT,DELETE) (default "GET")
+  -o	Supress output, no results will be printed to stdout
+  -r int
+    	Number of requests (use instead of -t) (default 1)
+  -t int
+    	Duration of testing in seconds (use instead of -r)
+  -u string
+    	URL to run against
+  -w int
+    	Number of seconds to wait before running test
+  -z string
+    	Read requests from a file
+```
 
-Infrastructure is provisioned via Terraform in [aine-forge-infra](https://github.com/wwtdigital/aine-forge-infra).
+Below is A basic example which will use 10 workers to send 200,000 requests is as follows: 
 
-## Getting Started
+```sh
+$ baton -u http://localhost:8080/test -c 10 -r 200000
+```
 
-1. **Install dependencies**
+Instead of the number of requests, you can specify the time (in seconds) during which the
+requests should be sent. Baton will wait for all the responses to be received before reporting the results.
 
-   ```bash
-   npm install
-   ```
+### Requests file
 
-2. **Set up environment variables**
+When specifying a file to load requests from (`-z filename`), the file should be of CSV format ([RFC-4180](https://tools.ietf.org/html/rfc4180))
 
-   ```bash
-   cp .env.example .env
-   ```
+```
+<method>,<url>,[<body>],[<header-key>:<header-value>, ...]
+...
+```
 
-   Edit `.env` with your PostgreSQL connection string.
+You can have one or more headers at the end separated by `,`
 
-3. **Run database migrations**
+For example:
 
-   ```bash
-   npm run db:migrate
-   ```
+```
+POST,http://localhost:8888,body,Accept: application/xml,Content-type: Secret
+GET,http://localhost:8888,,,
+```
 
-4. **Start both services**
+#### Example Output:
 
-   ```bash
-   npm run dev:fe    # Next.js on :3000
-   npm run dev:orch  # Orchestrator on :3001
-   ```
+```
+====================== Results ======================
+Total requests:                               1254155
+Time taken to complete requests:        10.046739294s
+Requests per second:                           124832
+Max response time (ms):                           440
+Min response time (ms):                            55
+Avg response time (ms):                        156.70
+===================== Breakdown =====================
+Number of connection errors:                        0
+Number of 1xx responses:                            0
+Number of 2xx responses:                      1254155
+Number of 3xx responses:                            0
+Number of 4xx responses:                            0
+Number of 5xx responses:                            0
+=====================================================
 
-5. **Run tests**
+```
 
-   ```bash
-   npm test
-   ```
+## Features which are on the horizon...
+* Dynamic generation of data based on a template
+* Testing REST endpoints with dynamically generated keys
 
-## Deploying to AWS
+## Caveats
+* Statistics are only provided when a fixed number of requests is provided (instead of providing a duration).
 
-1. **Provision infrastructure** — see [aine-forge-infra](https://github.com/wwtdigital/aine-forge-infra)
+## Dependency Management
+[Dep](https://github.com/golang/dep) is currently being utilized as the dependency manager for Baton.
+Details of how to use dep can be found on https://golang.github.io/dep/.
 
-2. **Configure GitHub repo** — the infra setup script (`setup-github.sh`) pushes these automatically:
-   - **Variables:** `AWS_ROLE_ARN`, `EC2_PUBLIC_IP`, `DYNAMODB_TABLE`, `LAMBDA_ROLE_ARN`, `LAMBDA_SG_ID`, `PRIVATE_SUBNET_IDS`, `RDS_ENDPOINT`, `EC2_SSH_KEY_ARN`
-   - The EC2 SSH key is stored in AWS Secrets Manager and fetched at runtime via OIDC — no repo secret needed
+Before updating any dependencies, ensure you have fully tested all functionality.
 
-3. **Push any branch** — GitHub Actions will automatically build, deploy, and output URLs
+## Contributing
+We welcome Your interest in the American Express Open Source Community on Github.
+Any Contributor to any Open Source Project managed by the American Express Open
+Source Community must accept and sign an Agreement indicating agreement to the
+terms below. Except for the rights granted in this Agreement to American Express
+and to recipients of software distributed by American Express, You reserve all
+right, title, and interest, if any, in and to Your Contributions. Please [fill out the Agreement](https://cla-assistant.io/americanexpress/).
 
-## Custom Environment Variables
+Please feel free to open pull requests and see [CONTRIBUTING.md](./CONTRIBUTING.md) for commit formatting details.
 
-Custom env vars for deployed services are stored as **GitHub Actions variables** (non-secret) and **GitHub Actions secrets** (sensitive). Nothing is committed to the repo.
+## License
+Any contributions made under this project will be governed by the [Apache License 2.0](./LICENSE.md).
 
-### Quick start
-
-1. Create local `.env`-format files in a `deploy/` directory (gitignored):
-
-   ```bash
-   mkdir -p deploy
-
-   # Non-secret orchestrator config
-   cat > deploy/orchestrator.env << 'EOF'
-   BEDROCK_MODEL_ID=us.anthropic.claude-haiku-4-5-20251001-v1:0
-   EOF
-
-   # Secret orchestrator config
-   cat > deploy/orchestrator.secrets << 'EOF'
-   EXTERNAL_API_KEY=sk-...
-   EOF
-
-   # Non-secret FE config (NEXT_PUBLIC_* also available at build time)
-   cat > deploy/fe.env << 'EOF'
-   NEXT_PUBLIC_APP_NAME=My App
-   EOF
-   ```
-
-2. Push to GitHub:
-
-   ```bash
-   ./scripts/push-deploy-env.sh
-   ```
-
-   Or set directly via the GitHub CLI:
-
-   ```bash
-   gh variable set DEPLOY_ORCH_ENV --body '{"BEDROCK_MODEL_ID":"us.anthropic.claude-haiku-4-5-20251001-v1:0"}'
-   gh secret set DEPLOY_ORCH_SECRETS --body '{"EXTERNAL_API_KEY":"sk-..."}'
-   ```
-
-### Naming convention
-
-| GitHub variable / secret | Injected into | Type |
-|---|---|---|
-| `DEPLOY_SHARED_ENV` | Both FE + orchestrator | Variable |
-| `DEPLOY_FE_ENV` | Lambda function env | Variable |
-| `DEPLOY_ORCH_ENV` | Docker container `-e` flags | Variable |
-| `DEPLOY_SHARED_SECRETS` | Both FE + orchestrator | Secret |
-| `DEPLOY_FE_SECRETS` | Lambda function env | Secret |
-| `DEPLOY_ORCH_SECRETS` | Docker container `-e` flags | Secret |
-
-Values are JSON objects (`{"KEY":"value"}`). Shared vars are merged into both targets; secrets override variables on key conflict. `NEXT_PUBLIC_*` keys in FE are also written to `.env.production` at build time.
+## Code of Conduct
+This project adheres to the [American Express Community Guidelines](./CODE_OF_CONDUCT.md).
+By participating, you are expected to honor these guidelines.
