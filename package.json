@@ -1,0 +1,21 @@
+{
+  "name": "aine-forge",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:fe": "npm run dev -w apps/forge-fe",
+    "dev:orch": "npm run dev -w apps/forge-orchestrator",
+    "build": "node scripts/build-all.mjs",
+    "test": "npm run test --workspaces --if-present",
+    "db:migrate": "npm run db:migrate -w packages/db",
+    "db:generate": "npm run db:generate -w packages/db"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
+  }
+}
