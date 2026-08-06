@@ -1,4 +1,4 @@
-# Copyright 2026 World wide technology
+# Copyright 2026 World Wide Technology (WWT)
 
 # Baton
 
