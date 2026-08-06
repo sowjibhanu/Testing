@@ -1,4 +1,4 @@
-# Copyright 2026 World wide technology
+# Copyright 2026 World Wide Technology (WWT)
 
                                  Apache License
                            Version 2.0, January 2004
