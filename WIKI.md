@@ -1,4 +1,4 @@
-# Copyright 2026 WWT
+# Copyright 2026 World wide technology
 
 # Project Wiki Documentation
 

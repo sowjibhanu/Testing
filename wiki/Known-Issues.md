@@ -1,220 +1,208 @@
 # Known Issues
 
-This page documents limitations, rough edges, and areas for improvement in Baton.
+This page documents limitations, caveats, and areas for improvement in Baton. Check here before reporting bugs or contributing.
 
 ## Limitations
 
 ### 1. Statistics Unavailable in Timed Mode
 
-**Location**: `timed_worker.go:line 1`, `baton.go:line 145`
+**Issue**: When using `-t` (duration mode), per-request statistics (min/max/avg response time) are not collected.
 
-**Impact**: When using `-t` (time-based testing), response time statistics (min, max, avg, percentiles) are not collected.
+**Location**: `timed_worker.go:30` — `sendRequest()` calls `performRequest()` instead of `performRequestWithStats()`
 
-**Why**: Timed workers don't call `performRequestWithStats()`, only `performRequest()` (see `timed_worker.go:line 35`).
+**Impact**: Users cannot see response time distribution in timed mode, only total throughput.
 
-**Workaround**: Use `-r` (request count) instead of `-t` if you need response time statistics. For time-based testing, use a large request count with a timeout wrapper.
+**Workaround**: Use `-r` (request count) mode if you need statistics. Run multiple tests with different concurrency levels to estimate performance.
 
-**Example**:
-```bash
-# This won't show response time stats
-baton -u http://localhost:8080 -t 10
+**Why**: Timed mode doesn't know request count in advance, so can't pre-allocate timing buffers efficiently.
 
-# This will show response time stats
-baton -u http://localhost:8080 -r 100000 -c 10
-```
+### 2. First Request Timing Excluded
 
-### 2. First Request Timing Excluded from Statistics
+**Issue**: The first request from each worker is excluded from timing statistics.
 
-**Location**: `worker.go:line 130`
+**Location**: `worker.go:73` — `collectStatistics()` skips first timing
 
-**Impact**: The first request's response time is not included in min/max/avg calculations.
+**Impact**: Slightly fewer data points (N-1 instead of N per worker).
 
-**Why**: First request includes client initialization overhead (see `worker.go:line 130` comment: "The first request is associated with overhead in setting up the client").
+**Rationale**: First request includes client setup overhead, skewing averages.
 
-**Workaround**: For very small request counts (< 10), results may be skewed. Use larger request counts for accurate statistics.
-
-**Example**:
-```bash
-# First request timing excluded, may skew results
-baton -u http://localhost:8080 -r 5
-
-# Better: larger request count
-baton -u http://localhost:8080 -r 10000
-```
+**Workaround**: None needed; this is intentional. Use large request counts for more accurate statistics.
 
 ### 3. No Dynamic Request Generation
 
-**Location**: `README.md` (listed as "Features which are on the horizon")
+**Issue**: Cannot generate request bodies or URLs dynamically (e.g., incrementing IDs).
 
-**Impact**: Cannot generate requests with dynamic data (e.g., incrementing IDs, random values).
+**Location**: `baton.go:125` — Single request template used for all requests
 
-**Why**: CSV parsing is static; no template engine is implemented.
+**Impact**: All requests are identical (except when using CSV file with `-z`).
 
-**Workaround**: Pre-generate CSV file with all variations, or use external tools to generate requests.
+**Workaround**: Pre-generate CSV file with all variations and use `-z` flag.
+
+**Future**: Planned feature (see README.md "Features which are on the horizon").
 
 ### 4. Fragile CSV Header Parsing
 
-**Location**: `csv_parsing.go:line 10`
+**Issue**: Header parsing splits on `:` only, doesn't handle edge cases.
 
-**Impact**: Headers with colons in values will be incorrectly parsed.
+**Location**: `csv_parsing.go:10` — `extractHeaders()` uses simple string split
 
-**Why**: Header parsing uses simple string split on `:` character (see `csv_parsing.go:line 10`):
-```go
-func extractHeaders(rawHeaders string) []string {
-    headerParts := strings.Split(rawHeaders, ":")
-    if len(headerParts) == 2 {
-        return []string{headerParts[0], headerParts[1]}
-    }
-    return nil
-}
-```
+**Impact**: Headers with `:` in the value will be parsed incorrectly.
 
-**Workaround**: Avoid colons in header values. If needed, use URL encoding or other escaping.
+**Example**: `Authorization: Bearer: token` would split incorrectly.
 
-**Example**:
-```bash
-# This will fail (colon in value)
-GET,http://localhost:8080,,,Authorization: Bearer token:with:colons
+**Workaround**: Avoid `:` in header values, or use URL encoding.
 
-# This works
-GET,http://localhost:8080,,,Authorization: Bearer-token-with-dashes
-```
+**Better approach**: Use proper CSV parsing with quoted fields.
 
 ### 5. No Request Validation
 
-**Location**: `baton.go:line 109`
+**Issue**: Invalid URLs or methods are not validated before sending.
 
-**Impact**: Invalid URLs or malformed requests are only caught at execution time.
+**Location**: `baton.go:125` — No validation of URL format or HTTP method
 
-**Why**: No pre-flight validation of requests before workers start.
+**Impact**: Invalid requests fail silently, counted as connection errors.
 
-**Workaround**: Test your configuration with a small request count first (`-r 1`).
+**Workaround**: Test your URL and method manually before running load test.
 
 ### 6. Response Time Bucketing Loses Precision
 
-**Location**: `baton.go:line 165`
+**Issue**: Response times are divided into 10 fixed brackets, losing granularity.
 
-**Impact**: Percentile reporting shows only 10 brackets, not true percentiles.
+**Location**: `baton.go:175` — `rtCounts` array with 10 brackets
 
-**Why**: Response times are divided into 10 equal-width brackets (see `baton.go:line 165`):
-```go
-var numOfBrackets = 10
-bs := (max - min) / numOfBrackets
-```
+**Impact**: Cannot see exact percentiles (e.g., p95, p99).
 
-**Workaround**: For precise percentile analysis, collect raw response times externally or modify the code.
+**Example**: If min=10ms and max=1000ms, brackets are 99ms wide.
 
-**Example Output**:
-```
-========= Percentage of responses received within a certain time (ms)======
+**Workaround**: Use external tools to post-process raw response times if needed.
 
-       100% : 440 ms
-```
-
-This shows "100% of responses within 440ms", not true percentiles like "p50", "p95", "p99".
+**Better approach**: Implement proper percentile calculation (p50, p95, p99).
 
 ### 7. No Request Timeout Configuration
 
-**Location**: `worker.go:line 48`, `baton.go:line 183`
+**Issue**: Cannot set timeout for individual requests.
 
-**Impact**: Requests can hang indefinitely if server doesn't respond.
+**Location**: `worker.go:48` — `fasthttp.Client` created with default timeout
 
-**Why**: FastHTTP client is created without timeout settings (see `baton.go:line 183`):
-```go
-client := &fasthttp.Client{}
-```
+**Impact**: Slow servers can hang workers indefinitely.
 
-**Workaround**: Use OS-level timeouts or network timeouts at the infrastructure level.
+**Workaround**: Set OS-level timeout or use `timeout` command wrapper.
+
+**Better approach**: Add `-timeout` flag to configure per-request timeout.
 
 ### 8. Hardcoded Test Server Port
 
-**Location**: `baton_test.go:line 50`
+**Issue**: Integration tests hardcode port 8888.
 
-**Impact**: Tests will fail if port 8888 is already in use.
+**Location**: `baton_test.go:54` — `var port = "8888"`
 
-**Why**: Test server port is hardcoded as `"8888"` (see `baton_test.go:line 50`):
-```go
-var port = "8888"
-```
+**Impact**: Tests fail if port 8888 is already in use.
 
-**Workaround**: Ensure port 8888 is available before running tests. Use `lsof -i :8888` to check.
+**Workaround**: Kill process using port 8888 before running tests.
+
+**Better approach**: Use OS-assigned port (port 0) and pass to tests.
 
 ### 9. No Graceful Shutdown
 
-**Location**: `baton.go:line 135`
+**Issue**: No way to stop a running load test cleanly (except Ctrl+C).
 
-**Impact**: If a worker hangs, the entire test hangs indefinitely.
+**Location**: `baton.go:115` — Workers run until requests channel closes
 
-**Why**: Main goroutine waits indefinitely on `done` channel with no timeout (see `baton.go:line 135`):
-```go
-for a := 1; a <= baton.configuration.concurrency; a++ {
-    <-preparedRunConfiguration.done
-}
-```
+**Impact**: Cannot pause or resume a test.
 
-**Workaround**: Use OS-level timeouts (`timeout` command on Unix, `timeout` on Windows).
+**Workaround**: Use Ctrl+C to stop (may lose final results).
 
-**Example**:
-```bash
-# Unix: timeout after 60 seconds
-timeout 60 baton -u http://localhost:8080 -r 1000000
-
-# Windows: timeout after 60 seconds
-timeout /t 60 baton -u http://localhost:8080 -r 1000000
-```
+**Better approach**: Add signal handling for SIGINT/SIGTERM.
 
 ### 10. Memory Overhead for Large Request Counts
 
-**Location**: `worker.go:line 125`, `baton.go:line 145`
+**Issue**: All response times stored in memory for statistics.
 
-**Impact**: Very large request counts (millions) consume significant memory for response time arrays.
+**Location**: `worker.go:82` — `responseTimes` slice grows unbounded
 
-**Why**: All response times are stored in memory (see `worker.go:line 125`):
-```go
-worker.httpResult.responseTimes = append(worker.httpResult.responseTimes, timing)
-```
+**Impact**: High memory usage for very large request counts (e.g., 10M requests).
 
-**Workaround**: Use timed mode (`-t`) instead of count mode for very large workloads, or split into multiple runs.
+**Example**: 1M requests × 4 bytes per timing = 4MB per worker.
 
-**Example**:
-```bash
-# Memory-intensive: stores 10M response times
-baton -u http://localhost:8080 -r 10000000
+**Workaround**: Use timed mode (`-t`) instead of count mode (`-r`).
 
-# Better: use timed mode
-baton -u http://localhost:8080 -t 60 -c 100
-```
+**Better approach**: Stream statistics or use fixed-size ring buffer.
 
 ## Test Coverage Gaps
 
-- **No tests for CSV parsing with edge cases** (empty fields, special characters, very long lines)
-- **No tests for TLS/SSL certificate validation** (`-i` flag)
-- **No tests for file I/O errors** (missing body file, unreadable CSV)
-- **No tests for very large request counts** (memory/performance)
-- **No tests for concurrent worker race conditions** (though design should prevent them)
-- **No tests for malformed HTTP responses**
+### Missing Tests
+
+- **TLS/SSL verification**: `-i` flag not tested
+- **Large request bodies**: No test for multi-MB bodies
+- **Concurrent CSV loading**: Multiple workers with `-z` flag
+- **Error recovery**: Behavior when server returns 5xx errors
+- **Timeout scenarios**: Slow/unresponsive servers
+- **Edge cases**: Empty body, missing URL, invalid method
+
+### How to Add Tests
+
+1. Add test function to `baton_test.go`
+2. Use `setupAndListen()` helper to start test server
+3. Create `Configuration` with test parameters
+4. Assert on `HTTPTestHandler` state
+
+Example:
+```go
+func TestIgnoreTLSFlag(t *testing.T) {
+    config := defaultConfig()
+    config.ignoreTLS = true
+    // ... test implementation
+}
+```
 
 ## Documentation Gaps
 
-- **No API documentation** for the `workable` interface
-- **No performance tuning guide** (concurrency levels, request sizes)
-- **No troubleshooting guide** for common errors
-- **No examples** for advanced CSV request files
-- **No Docker usage examples** beyond basic build
+- No architecture diagram (see Architecture-Decisions for text version)
+- No performance tuning guide (e.g., optimal concurrency)
+- No troubleshooting guide (e.g., "why is throughput low?")
+- No examples for complex CSV files
+- No Docker usage examples
 
 ## Future Improvements
 
-- [ ] Add request timeout configuration (`-timeout` flag)
-- [ ] Implement true percentile reporting (p50, p95, p99)
-- [ ] Add dynamic request generation with templates
-- [ ] Improve CSV header parsing (handle colons in values)
-- [ ] Add graceful shutdown with timeout
-- [ ] Implement streaming response time output (for large request counts)
-- [ ] Add support for HTTP/2
-- [ ] Add support for WebSocket load testing
-- [ ] Add metrics export (Prometheus, JSON)
-- [ ] Add request rate limiting (requests per second)
-- [ ] Add support for custom authentication schemes
-- [ ] Add support for request/response validation
-- [ ] Implement connection pooling configuration
-- [ ] Add support for distributed load testing (multiple instances)
+### High Priority
+
+1. **Proper percentile calculation** — Replace bucketing with p50/p95/p99
+2. **Request timeout configuration** — Add `-timeout` flag
+3. **Graceful shutdown** — Handle SIGINT/SIGTERM
+4. **Statistics in timed mode** — Collect timings even in `-t` mode
+
+### Medium Priority
+
+5. **Dynamic request generation** — Template-based URL/body generation
+6. **Better CSV parsing** — Handle edge cases and quoted fields
+7. **Request validation** — Validate URLs and methods before sending
+8. **Performance tuning** — Reduce memory overhead for large counts
+
+### Low Priority
+
+9. **Metrics export** — JSON/Prometheus output format
+10. **Distributed testing** — Coordinate multiple Baton instances
+11. **Request recording** — Record and replay HTTP traffic
+12. **GUI dashboard** — Real-time metrics visualization
+
+## Reporting Issues
+
+When reporting a bug:
+
+1. Check this page first — may be a known limitation
+2. Include Baton version: `baton -version` (if available)
+3. Include Go version: `go version`
+4. Provide minimal reproduction case
+5. Include full error output and logs
+
+## Contributing Fixes
+
+Before fixing an issue:
+
+1. Read [Coding Standards](Coding-Standards)
+2. Check if there are existing tests for the area
+3. Add tests for your fix
+4. Run `go test -v` to ensure all tests pass
+5. Run `gofmt -w` on modified files
+6. See [CONTRIBUTING.md](../CONTRIBUTING.md) for PR process
