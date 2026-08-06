@@ -1,4 +1,4 @@
-# Copyright 2026 WWT
+# Copyright 2026 wwt
 version: '3'
 services:
   baton:
