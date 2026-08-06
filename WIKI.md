@@ -1,3 +1,5 @@
+# Copyright 2026 WWT
+
 # Project Wiki Documentation
 
 This project maintains comprehensive wiki documentation to help developers understand the codebase, conventions, and architecture.
