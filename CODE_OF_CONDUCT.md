@@ -1,3 +1,5 @@
+# Copyright 2026 WWT
+
 ### American Express Open Source Community Guidelines
 
 #### Last Modified: January 29, 2016
@@ -6,23 +8,23 @@ Welcome to the American Express Open Source Community on GitHub! These American 
 
 **IMPORTANT REMINDER:**
 
-When you visit American Express on any third party sites such as GitHub your activity there is subject to that site’s then current terms of use., along with their privacy and data security practices and policies. The Github platform is not affiliated with us and may have practices and policies that are different than are our own.
-Please note, American Express is not responsible for, and does not control, the GitHub site’s terms of use, privacy and data security practices and policies. You should, therefore, always exercise caution when posting, sharing or otherwise taking any action on that site and, of course, on the Internet in general.
+When you visit American Express on any third party sites such as GitHub your activity there is subject to that site's then current terms of use., along with their privacy and data security practices and policies. The Github platform is not affiliated with us and may have practices and policies that are different than are our own.
+Please note, American Express is not responsible for, and does not control, the GitHub site's terms of use, privacy and data security practices and policies. You should, therefore, always exercise caution when posting, sharing or otherwise taking any action on that site and, of course, on the Internet in general.
 Our open source community strives to:
 - **Be friendly and patient**.
 - **Be welcoming**: We strive to be a community that welcomes and supports people of all
 backgrounds and identities. This includes, but is not limited to members of any race, ethnicity, culture, national origin, color, immigration status, social and economic class, educational level, sex, sexual orientation, gender identity and expression, age, size, family status, political belief, religion, and mental and physical ability.
 - **Be considerate**: Your work will be used by other people, and you in turn will depend on the work of others. Any decision you take will affect users and colleagues, and you should take those consequences into account when making decisions. Remember that we're a world-wide community, so you might not be communicating in someone else's primary language.
-- **Be respectful**: Not all of us will agree all the time, but disagreement is no excuse for poor behavior and poor manners. We might all experience some frustration now and then, but we cannot allow that frustration to turn into a personal attack. It’s important to remember that a community where people feel uncomfortable or threatened is not a productive one.
+- **Be respectful**: Not all of us will agree all the time, but disagreement is no excuse for poor behavior and poor manners. We might all experience some frustration now and then, but we cannot allow that frustration to turn into a personal attack. It's important to remember that a community where people feel uncomfortable or threatened is not a productive one.
 - **Be careful in the words that we choose**: We are a community of professionals, and we conduct ourselves professionally. Be kind to others. Do not insult or put down other participants. Harassment and other exclusionary behavior aren't acceptable.
-- **Try to understand why we disagree**: Disagreements, both social and technical, happen all the time. It is important that we resolve disagreements and differing views constructively. Remember that we’re all different people. The strength of our community comes from its diversity, people from a wide range of backgrounds. Different people have different perspectives on issues. Being unable to understand why someone holds a viewpoint doesn’t mean that they’re wrong. Don’t forget that it is human to err and blaming each other doesn’t get us anywhere. Instead, focus on helping to resolve issues and learning from mistakes.
+- **Try to understand why we disagree**: Disagreements, both social and technical, happen all the time. It is important that we resolve disagreements and differing views constructively. Remember that we're all different people. The strength of our community comes from its diversity, people from a wide range of backgrounds. Different people have different perspectives on issues. Being unable to understand why someone holds a viewpoint doesn't mean that they're wrong. Don't forget that it is human to err and blaming each other doesn't get us anywhere. Instead, focus on helping to resolve issues and learning from mistakes.
 
 ### Definitions
 Harassment includes, but is not limited to:
 - Offensive comments related to gender, gender identity and expression, sexual orientation, disability, mental illness, neuro(a)typicality, physical appearance, body size, race, age, regional discrimination, political or religious affiliation
-- Unwelcome comments regarding a person’s lifestyle choices and practices, including those related to food, health, parenting, drugs, and employment
+- Unwelcome comments regarding a person's lifestyle choices and practices, including those related to food, health, parenting, drugs, and employment
 - Deliberate misgendering. This includes deadnaming or persistently using a pronoun that does not correctly reflect a person's gender identity. You must address people by the name they give you when not addressing them by their username or handle
-- Physical contact and simulated physical contact (eg, textual descriptions like “hug” or “backrub”) without consent or after a request to stop
+- Physical contact and simulated physical contact (eg, textual descriptions like "hug" or "backrub") without consent or after a request to stop
 - Threats of violence, both physical and psychological
 - Incitement of violence towards any individual, including encouraging a person to commit suicide
 or to engage in self-harm
@@ -34,16 +36,16 @@ or to engage in self-harm
 - Pattern of inappropriate social contact, such as requesting/assuming inappropriate levels of
 intimacy with others
 - Continued one-on-one communication after requests to cease
-- Deliberate “outing” of any aspect of a person’s identity without their consent except as necessary
+- Deliberate "outing" of any aspect of a person's identity without their consent except as necessary
 to protect others from intentional abuse
 - Publication of non-harassing private communication
 
-Our open source community prioritizes marginalized people’s safety over privileged people’s comfort. We will not act on complaints regarding:
-- ‘Reverse’ -isms, including ‘reverse racism,’ ‘reverse sexism,’ and ‘cisphobia’
-- Reasonable communication of boundaries, such as “leave me alone,” “go away,” or “I’m not
-discussing this with you”
+Our open source community prioritizes marginalized people's safety over privileged people's comfort. We will not act on complaints regarding:
+- 'Reverse' -isms, including 'reverse racism,' 'reverse sexism,' and 'cisphobia'
+- Reasonable communication of boundaries, such as "leave me alone," "go away," or "I'm not
+discussing this with you"
 - Refusal to explain or debate social justice concepts
-- Communicating in a ‘tone’ you don’t find congenial
+- Communicating in a 'tone' you don't find congenial
 - Criticizing racist, sexist, cissexist, or otherwise oppressive behavior or assumptions
 
 ### Diversity Statement

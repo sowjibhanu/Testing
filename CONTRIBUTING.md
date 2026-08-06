@@ -1,3 +1,5 @@
+# Copyright 2026 WWT
+
 # Contributing to Baton
 
 Before you start, please ensure you understand the details around code of conduct and licensing mentioned in [README.md](./README.md)
@@ -15,4 +17,3 @@ Step 3: Open a pull request to merge the changes with this repository
 ### Code Formatting
 
 Ensure that you run `gofmt -w file.go` against any file which you have modified to ensure consistent formatting across the project.
-

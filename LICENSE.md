@@ -1,3 +1,5 @@
+# Copyright 2026 WWT
+
                                  Apache License
                            Version 2.0, January 2004
                         http://www.apache.org/licenses/
@@ -82,8 +84,8 @@
       institute patent litigation against any entity (including a
       cross-claim or counterclaim in a lawsuit) alleging that the Work
       or a Contribution incorporated within the Work constitutes direct
-      or contributory patent infringement, then any patent licenses
-      granted to You under this License for that Work shall terminate
+      or contributory patent patent infringement, then any patent licenses
+      granted to You under this License for this Work shall terminate
       as of the date such litigation is filed.
 
    4. Redistribution. You may reproduce and distribute copies of the
@@ -181,7 +183,7 @@
       boilerplate notice, with the fields enclosed by brackets "{}"
       replaced with your own identifying information. (Don't include
       the brackets!)  The text should be enclosed in the appropriate
-      comment syntax for the file format. We also recommend that a
+      comment syntax for the file type. We also recommend that a
       file or class name and description of purpose be included on the
       same "printed page" as the copyright notice for easier
       identification within third-party archives.

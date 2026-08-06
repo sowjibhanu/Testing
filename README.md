@@ -1,3 +1,5 @@
+# Copyright 2026 WWT
+
 # Baton
 
 Baton is a load testing tool written in Go. It currently supports GET, POST, PUT, and DELETE requests. 
@@ -25,10 +27,12 @@ Baton currently supports the following options:
     	Number of concurrent requests (default 1)
   -f string
     	File path to file to be used as the body (use instead of -b)
-  -i	Ignore TLS/SSL certificate validation
+  -i
+	Ignore TLS/SSL certificate validation
   -m string
     	HTTP Method (GET,POST,PUT,DELETE) (default "GET")
-  -o	Supress output, no results will be printed to stdout
+  -o
+	Supress output, no results will be printed to stdout
   -r int
     	Number of requests (use instead of -t) (default 1)
   -t int
