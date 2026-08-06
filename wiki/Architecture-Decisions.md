@@ -4,93 +4,65 @@ This page explains how Baton is structured and the key design decisions behind i
 
 ## System Overview
 
-Baton is a load testing orchestrator that coordinates multiple concurrent workers to send HTTP requests and collect statistics. The system has two execution modes: **count-based** (fixed number of requests) and **timed** (requests for a duration).
+Baton is a load testing orchestrator that coordinates multiple concurrent workers to send HTTP requests and aggregate results.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Baton (Orchestrator)                     │
-│                      baton.go:line 1                        │
+│ main() - CLI Entry Point (baton.go:68)                      │
+│ ├─ Parse flags                                              │
+│ ├─ Create Configuration                                     │
+│ └─ Create Baton instance and call run()                     │
 └─────────────────────────────────────────────────────────────┘
-                              │
-                ┌─────────────┼─────────────┐
-                │             │             │
-         ┌──────▼──────┐ ┌───▼────────┐ ┌─▼──────────────┐
-         │ Configuration│ │ CSV Parser │ │ Result Aggreg. │
-         │ config.go:1  │ │ csv_pa.go:1│ │ result.go:1    │
-         └──────────────┘ └────────────┘ └────────────────┘
-                              │
-                ┌─────────────┴─────────────┐
-                │                           │
-         ┌──────▼──────────┐        ┌──────▼──────────┐
-         │  CountWorker    │        │  TimedWorker    │
-         │ count_wor.go:1  │        │ timed_wor.go:1  │
-         └─────────────────┘        └─────────────────┘
-                │                           │
-                └─────────────┬─────────────┘
-                              │
-                        ┌─────▼──────┐
-                        │ Base Worker │
-                        │ worker.go:1 │
-                        └─────┬──────┘
-                              │
-                    ┌─────────┴─────────┐
-                    │                   │
-            ┌───────▼────────┐  ┌──────▼──────┐
-            │  FastHTTP      │  │ HTTP Result │
-            │  Client        │  │ http_res.go │
-            └────────────────┘  └─────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Baton.run() (baton.go:82)                                   │
+│ ├─ Validate configuration                                   │
+│ ├─ Prepare run (parse CSV, setup channels)                  │
+│ ├─ Spawn N workers as goroutines                            │
+│ ├─ Wait for all workers to finish                           │
+│ └─ Process and print results                                │
+└─────────────────────────────────────────────────────────────┘
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Worker Goroutines (worker.go, count_worker.go, etc.)        │
+│ ├─ Receive requests from channel                            │
+│ ├─ Send HTTP requests                                       │
+│ ├─ Record response times and status codes                   │
+│ └─ Send results back via channel                            │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Main Components
 
-### 1. Baton Orchestrator (`baton.go:line 1`)
+### 1. Baton Orchestrator (`baton.go`)
 
-**Responsibility**: Parse CLI flags, coordinate workers, aggregate results, and output statistics.
+**Responsibility**: Coordinate the entire load test execution.
 
-**Key Methods**:
-- `main()` — Entry point, parses flags and creates Baton instance
-- `(baton *Baton) run()` — Orchestrates the entire test execution
-- `processResults()` — Aggregates worker results and computes statistics
+**Key methods**:
+- `main()` (line 68) — Parse CLI flags and start execution
+- `run()` (line 82) — Main orchestration loop
+- `processResults()` (line 145) — Aggregate worker results
 
-**Data Flow**:
-1. Parse CLI flags into `Configuration` struct (see `baton.go:line 23`)
-2. Validate configuration (see `baton.go:line 105`)
-3. Prepare run (create channels, load CSV if needed) (see `baton.go:line 109`)
-4. Spawn workers as goroutines (see `baton.go:line 118`)
-5. Wait for all workers to complete (see `baton.go:line 135`)
-6. Aggregate results from worker channel (see `baton.go:line 145`)
-7. Print formatted results (see `result.go:line 48`)
+**Data structures**:
+- `Baton` (line 47) — Holds configuration and result
+- `runConfiguration` (line 57) — Runtime state (channels, client, requests)
 
-### 2. Configuration (`configuration.go:line 1`)
+### 2. Worker System (`worker.go`, `count_worker.go`, `timed_worker.go`)
 
-**Responsibility**: Hold and validate test parameters.
+**Responsibility**: Execute HTTP requests and collect metrics.
 
-**Fields** (see `configuration.go:line 10`):
-- `body` — Request body string
-- `concurrency` — Number of concurrent workers
-- `dataFilePath` — Path to file containing request body
-- `duration` — Time-based test duration in seconds
-- `ignoreTLS` — Skip TLS certificate validation
-- `method` — HTTP method (GET, POST, PUT, DELETE)
-- `numberOfRequests` — Fixed number of requests to send
-- `requestsFromFile` — Path to CSV file with requests
-- `suppressOutput` — Disable logging
-- `url` — Target URL
-- `wait` — Seconds to wait before starting test
+**Base worker** (`worker.go:13`):
+```go
+type worker struct {
+    httpResult  HTTPResult
+    client      *fasthttp.Client
+    requests    <-chan bool
+    httpResults chan<- HTTPResult
+    done        chan<- bool
+}
+```
 
-**Validation** (see `configuration.go:line 32`):
-- Concurrency must be >= 1
-- Number of requests must be > 0
-
-### 3. Worker System
-
-**Base Worker** (`worker.go:line 1`):
-- Holds HTTP client, channels, and result statistics
-- Implements `performRequest()` and `performRequestWithStats()`
-- Implements `recordCount()` to categorize responses by status code
-- Implements `collectStatistics()` to compute min/max/avg response times
-
-**Worker Interface** (`worker.go:line 30`):
+**Polymorphism via interface** (`worker.go:18`):
 ```go
 type workable interface {
     sendRequests(requests []preLoadedRequest)
@@ -99,115 +71,177 @@ type workable interface {
 }
 ```
 
-**CountWorker** (`count_worker.go:line 1`):
-- Sends a fixed number of requests
-- Collects response time statistics
-- Used when `-r` flag is specified
+**Two implementations**:
 
-**TimedWorker** (`timed_worker.go:line 1`):
-- Sends requests for a specified duration
-- Does NOT collect response time statistics (see Known Issues)
-- Used when `-t` flag is specified
+1. **CountWorker** (`count_worker.go:22`) — Sends fixed number of requests
+   - Collects timing statistics for each request
+   - Used when `-r` flag specifies request count
+   - Calls `collectStatistics()` to compute min/max/avg
 
-### 4. Result Aggregation (`result.go:line 1`)
+2. **TimedWorker** (`timed_worker.go:22`) — Sends requests for a duration
+   - Runs until time expires
+   - Used when `-t` flag specifies duration
+   - Does NOT collect per-request statistics (see Known Issues)
 
-**Responsibility**: Collect and format test results.
+### 3. Configuration (`configuration.go`)
 
-**Result Struct** (see `result.go:line 10`):
-- `httpResult` — HTTP response statistics
-- `totalRequests` — Total requests sent
-- `timeTaken` — Total test duration
-- `requestsPerSecond` — Throughput metric
-- `hasStats` — Whether response time stats are available
-- `averageTime` — Average response time in ms
-- `minTime` / `maxTime` — Response time bounds
+**Responsibility**: Hold and validate CLI parameters.
 
-**Output Format** (see `result.go:line 48`):
-- Formatted table with aligned columns
-- Response time percentile buckets (10 brackets)
-- Status code breakdowns (1xx, 2xx, 3xx, 4xx, 5xx, errors)
+**Fields** (configuration.go:7):
+```go
+type Configuration struct {
+    body             string
+    concurrency      int
+    dataFilePath     string
+    duration         int
+    ignoreTLS        bool
+    method           string
+    numberOfRequests int
+    requestsFromFile string
+    suppressOutput   bool
+    url              string
+    wait             int
+}
+```
 
-### 5. HTTP Result Statistics (`http_result.go:line 1`)
+**Validation** (configuration.go:33):
+- Concurrency must be ≥ 1
+- Number of requests must be > 0
 
-**Responsibility**: Track HTTP response statistics.
+### 4. CSV Parsing (`csv_parsing.go`)
 
-**Fields** (see `http_result.go:line 10`):
-- Status code counters: `status1xxCount`, `status2xxCount`, etc.
-- Response time tracking: `responseTimes` (array), `responseTimesPercent` (brackets)
-- Error tracking: `connectionErrorCount`
-- Aggregation: `timeSum`, `totalSuccess`
+**Responsibility**: Load requests from CSV file.
 
-### 6. CSV Parsing (`csv_parsing.go:line 1`)
-
-**Responsibility**: Parse CSV request files.
-
-**Format** (see `csv_parsing.go:line 32`):
+**Format** (RFC-4180):
 ```
 <method>,<url>,[<body>],[<header-key>:<header-value>, ...]
 ```
 
-**Example**:
-```
-POST,http://localhost:8888,body,Accept: application/xml,Content-type: Secret
-GET,http://localhost:8888,,,
+**Function** (csv_parsing.go:32):
+```go
+func preLoadRequestsFromFile(filename string) ([]preLoadedRequest, error)
 ```
 
-**Parsing** (see `csv_parsing.go:line 32`):
-- Reads CSV with standard library `encoding/csv`
-- Extracts method, URL, body, and headers
-- Headers are split on `:` character
-- Returns slice of `preLoadedRequest` structs
+**Header parsing** (csv_parsing.go:10):
+- Splits on `:` to extract key-value pairs
+- Handles multiple headers per request
+
+### 5. Result Aggregation (`result.go`, `http_result.go`)
+
+**HTTPResult** (http_result.go:7) — Counters for a single worker:
+```go
+type HTTPResult struct {
+    connectionErrorCount int
+    status1xxCount       int
+    status2xxCount       int
+    status3xxCount       int
+    status4xxCount       int
+    status5xxCount       int
+    maxTime              int
+    minTime              int
+    timeSum              int64
+    totalSuccess         int
+    responseTimes        []int
+    responseTimesPercent [][3]int
+}
+```
+
+**Result** (result.go:7) — Aggregated results:
+```go
+type Result struct {
+    httpResult        HTTPResult
+    totalRequests     int
+    timeTaken         time.Duration
+    requestsPerSecond int
+    hasStats          bool
+    averageTime       float32
+    minTime           int
+    maxTime           int
+}
+```
+
+**Aggregation** (baton.go:145):
+- Collects results from all workers
+- Sums counters
+- Computes min/max/avg response times
+- Calculates percentile buckets (10 brackets)
+
+### 6. Logging (`log_writer.go`)
+
+**Responsibility**: Suppress or enable output.
+
+**Custom writer** (log_writer.go:7):
+```go
+type logWriter struct {
+    enabled bool
+}
+```
+
+**Usage** (baton.go:161):
+- Configured via `-o` flag
+- Allows silent operation for scripting
 
 ## Data Flow
 
-### Count-Based Test Flow
+### Request Count Mode (`-r 1000`)
 
 ```
-1. CLI flags → Configuration
-2. Configuration.validate()
-3. prepareRun() → creates channels, loads CSV if needed
-4. Spawn N workers (goroutines)
-5. Each worker:
-   a. Reads from requests channel
-   b. Executes HTTP request
-   c. Records response time and status
-   d. Repeats until requests channel closes
-   e. Sends HTTPResult to results channel
-6. Main goroutine waits for all workers on done channel
-7. Aggregates results from results channel
-8. Computes statistics (min, max, avg, percentiles)
-9. Prints formatted output
+1. Parse flags → Configuration
+2. prepareRun() creates:
+   - requests channel (buffered with 1000 items)
+   - results channel (buffered with concurrency size)
+   - done channel (buffered with concurrency size)
+3. Spawn N workers (N = concurrency)
+4. Each worker:
+   - Reads from requests channel
+   - Sends HTTP request
+   - Records timing in timings channel
+   - Repeats until requests channel closes
+5. Worker calls collectStatistics():
+   - Reads all timings
+   - Computes min/max/avg
+   - Skips first request (overhead)
+6. Worker sends HTTPResult to results channel
+7. Main thread collects all results
+8. Aggregates and prints
 ```
 
-### Timed Test Flow
+### Timed Mode (`-t 10`)
 
 ```
-1. CLI flags → Configuration
-2. Configuration.validate()
-3. prepareRun() → creates channels, sets timedMode=true
-4. Spawn N workers (goroutines)
-5. Each worker:
-   a. Records start time
-   b. Executes HTTP requests in loop
-   c. Checks elapsed time, breaks when duration exceeded
-   d. Sends HTTPResult to results channel (no timing stats)
-6. Main goroutine waits for all workers on done channel
-7. Aggregates results from results channel
-8. Prints output (no response time statistics)
+1. Parse flags → Configuration
+2. prepareRun() creates channels (same as above)
+3. Spawn N workers
+4. Each worker:
+   - Records start time
+   - Sends HTTP requests in loop
+   - Checks elapsed time
+   - Stops when duration expires
+   - Does NOT collect per-request statistics
+5. Worker sends HTTPResult to results channel
+6. Main thread collects results
+7. Aggregates and prints (no per-request stats)
 ```
 
 ## Key Design Decisions
 
 ### 1. Two Execution Modes (Count vs. Timed)
 
-**Decision**: Support both fixed request counts and time-based testing.
+**Decision**: Support both `-r` (fixed count) and `-t` (duration) modes.
 
-**Rationale**: Different testing scenarios require different approaches:
-- Count-based: Measure throughput and response times for a known workload
-- Timed: Measure sustained throughput over a time period
+**Rationale** (baton.go:103):
+- Count mode: Useful for benchmarking (consistent load)
+- Timed mode: Useful for stress testing (sustained load)
 
-**Implementation** (see `baton.go:line 113`):
+**Trade-off**: Timed mode doesn't collect per-request statistics (see Known Issues).
+
+### 2. Worker Polymorphism via Interface
+
+**Decision**: Use `workable` interface for different worker types.
+
+**Rationale** (baton.go:115):
 ```go
+var worker workable
 if preparedRunConfiguration.timedMode {
     worker = newTimedWorker(...)
 } else {
@@ -215,123 +249,97 @@ if preparedRunConfiguration.timedMode {
 }
 ```
 
-**Trade-off**: Timed mode sacrifices response time statistics for simplicity (see Known Issues).
-
-### 2. Worker Polymorphism via Interface
-
-**Decision**: Use `workable` interface for different worker types.
-
-**Rationale**: Allows clean separation between count and timed workers while sharing base functionality.
-
-**Implementation** (see `worker.go:line 30`):
-```go
-type workable interface {
-    sendRequests(requests []preLoadedRequest)
-    sendRequest(request preLoadedRequest)
-    setCustomClient(client *fasthttp.Client)
-}
-```
-
-**Trade-off**: Slight overhead of interface dispatch, but cleaner code organization.
+**Benefit**: Easy to add new worker types without changing orchestrator.
 
 ### 3. Channel-Based Coordination
 
-**Decision**: Use Go channels for worker coordination instead of locks/mutexes.
+**Decision**: Use Go channels for worker coordination.
 
-**Rationale**: Channels are idiomatic Go and prevent race conditions naturally.
-
-**Implementation** (see `baton.go:line 127`):
-- `requests` channel: Distributes work
-- `results` channel: Collects statistics
+**Rationale** (baton.go:130):
+- `requests` channel: Distributes work to workers
+- `results` channel: Collects results from workers
 - `done` channel: Signals completion
 
-**Trade-off**: Channels have overhead, but correctness and readability are prioritized.
+**Benefit**: Idiomatic Go, safe concurrent access, no locks needed.
 
-### 4. FastHTTP for HTTP Client
+### 4. FastHTTP Choice
 
-**Decision**: Use `github.com/valyala/fasthttp` instead of standard library `net/http`.
+**Decision**: Use `github.com/valyala/fasthttp` instead of standard `net/http`.
 
-**Rationale**: FastHTTP is optimized for high-throughput scenarios and reduces allocations.
+**Rationale** (Gopkg.toml:27):
+- Higher throughput for load testing
+- Lower memory allocation
+- Better for high-concurrency scenarios
 
-**Implementation** (see `worker.go:line 48`):
-```go
-if err := worker.client.Do(req, resp); err != nil {
-    worker.httpResult.connectionErrorCount++
-}
-```
-
-**Trade-off**: FastHTTP has a different API than `net/http`, but performance is critical for load testing.
+**Trade-off**: Less familiar API, fewer features than standard library.
 
 ### 5. Response Time Bucketing
 
-**Decision**: Divide response times into 10 brackets for percentile reporting.
+**Decision**: Divide response times into 10 percentile brackets.
 
-**Rationale**: Provides distribution insight without storing all individual response times.
-
-**Implementation** (see `baton.go:line 165`):
+**Rationale** (baton.go:175):
 ```go
 var numOfBrackets = 10
 rtCounts := make([][3]int, numOfBrackets)
 bs := (max - min) / numOfBrackets
 ```
 
-**Trade-off**: Loses precision compared to full percentile calculation, but reduces memory usage.
+**Benefit**: Summarizes distribution without storing all timings.
+
+**Trade-off**: Loses precision (see Known Issues).
 
 ### 6. First Request Timing Exclusion
 
-**Decision**: Exclude the first request's timing from statistics.
+**Decision**: Skip first request when computing statistics.
 
-**Rationale**: First request includes client initialization overhead.
-
-**Implementation** (see `worker.go:line 130`):
+**Rationale** (worker.go:73):
 ```go
+// The first request is associated with overhead
+// in setting up the client so we ignore it's result
 if first {
     first = false
     continue
 }
 ```
 
-**Trade-off**: Slightly inaccurate for very small request counts, but more representative for typical loads.
+**Benefit**: More accurate average (excludes client setup overhead).
 
-### 7. Atomic Operations for Test Counters
+**Trade-off**: Slightly fewer data points.
 
-**Decision**: Use `sync/atomic` for thread-safe counter updates in tests.
+### 7. Atomic Operations for Counters
 
-**Rationale**: Avoids mutex overhead for simple counter increments.
+**Decision**: Use `sync/atomic` for test handler counters.
 
-**Implementation** (see `baton_test.go:line 35`):
+**Rationale** (baton_test.go:42):
 ```go
 atomic.AddUint32(&h.noRequestsReceived, 1)
 ```
 
-**Trade-off**: Atomic operations are slightly slower than regular assignments, but guarantee correctness.
+**Benefit**: Thread-safe without locks.
+
+**Trade-off**: Only works for simple counters.
 
 ## Concurrency Model
 
-**Goroutine per worker**: Each worker runs in its own goroutine (see `baton.go:line 118`):
-```go
-go worker.sendRequest(request)
-```
+**Goroutines**: One per worker (default 1, max limited by system).
 
-**Channel coordination**:
-- Main goroutine spawns N workers
-- Main goroutine waits on `done` channel N times (see `baton.go:line 135`)
-- Workers send results to `results` channel (see `worker.go:line 145`)
-- Main goroutine collects N results (see `baton.go:line 145`)
+**Channels**: Three per run:
+- `requests` — Work distribution (buffered)
+- `results` — Result collection (buffered)
+- `done` — Completion signaling (buffered)
 
-**No shared mutable state**: Each worker has its own `HTTPResult` struct, eliminating race conditions.
+**Synchronization**:
+- Main thread waits on `done` channel for all workers
+- Workers send results on `results` channel
+- No shared memory except channels
+
+**Scalability**: Tested up to 100,000 concurrent requests (baton_test.go:109).
 
 ## Error Handling Strategy
 
-**Validation-first**: Configuration is validated before any work begins (see `baton.go:line 105`).
+1. **Configuration validation** (baton.go:88) — Fail fast before execution
+2. **File parsing errors** (baton.go:93) — Return error with context
+3. **Connection errors** (worker.go:48) — Count as error, continue
+4. **HTTP errors** (worker.go:48) — Count by status code, continue
 
-**Graceful degradation**: Connection errors are counted but don't stop the test (see `worker.go:line 48`).
-
-**Fatal errors**: Unrecoverable errors (invalid config, file I/O) call `log.Fatalf()` (see `baton.go:line 106`).
-
-## Performance Considerations
-
-1. **Request pooling**: FastHTTP reuses request/response objects (see `worker.go:line 48`)
-2. **Channel buffering**: Channels are buffered to avoid blocking (see `baton.go:line 193`)
-3. **Atomic counters**: Used instead of mutexes for test verification
-4. **Static binary**: Docker build produces minimal image with no runtime dependencies
+**Philosophy**: Resilient to individual request failures, fail only on configuration/setup errors.
