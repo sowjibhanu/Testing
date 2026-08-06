@@ -42,7 +42,7 @@ Examples from the codebase:
 - `configuration.go` — Configuration struct and validation
 - `csv_parsing.go` — CSV file parsing for bulk requests
 - `result.go` — Result aggregation and formatted output
-- `http_result.go` — HTTP response counters and totals
+- `http_result.go` — HTTP response counters
 - `log_writer.go` — Custom logging with suppress capability
 - `baton_test.go` — Integration tests
 
@@ -96,6 +96,7 @@ func startServer() *HTTPTestHandler {
 - File-based requests (`TestPostRequestLoadedFromFile`)
 - Custom headers (`TestThatHeadersAreSetWhenSendingFromFile`)
 - Timing accuracy (`TestThatTimeOptionRunsForCorrectAmountOfTime`)
+- Body loading from file (`TestLoadPostFromTextFile`)
 
 Run tests with: `go test -v`
 

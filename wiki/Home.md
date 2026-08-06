@@ -20,10 +20,11 @@ baton/
 ├── worker.go             # Base worker implementation
 ├── count_worker.go       # Worker for fixed request counts
 ├── timed_worker.go       # Worker for time-based testing
-├── configuration.go      # Configuration validation
-├── csv_parsing.go        # CSV request file parsing
-├── result.go             # Result aggregation and output
+├── configuration.go      # Configuration struct and validation
+├── csv_parsing.go        # CSV file parsing for bulk requests
+├── result.go             # Result aggregation and formatted output
 ├── http_result.go        # HTTP response counters
+├── log_writer.go         # Custom logging with suppress capability
 ├── baton_test.go         # Integration tests
 ├── Dockerfile            # Multi-stage Docker build
 ├── Gopkg.toml            # Dependency management (Go Dep)
@@ -51,3 +52,7 @@ Before contributing, please:
 3. Check [Known Issues](Known-Issues) to avoid duplicating known problems
 4. Run `gofmt -w` on modified files
 5. Ensure tests pass: `go test -v`
+
+## License
+
+Licensed under the [Apache License 2.0](../LICENSE.md). See [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md) for community guidelines.
