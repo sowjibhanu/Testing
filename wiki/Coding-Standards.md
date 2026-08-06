@@ -5,7 +5,7 @@ This page documents the conventions and best practices followed in the Baton cod
 ## Language & Build
 
 - **Language**: Go (golang)
-- **Minimum Version**: Go 1.x (see Dockerfile for build environment)
+- **Minimum Version**: Go 1.x (see `Dockerfile` for build environment)
 - **Dependency Manager**: [Go Dep](https://golang.github.io/dep/) (see `Gopkg.toml`)
 - **Build**: Multi-stage Docker build with static binary output (see `Dockerfile`)
 
@@ -20,8 +20,9 @@ This is enforced in pull requests.
 
 ## Naming Conventions
 
-- **Types**: PascalCase (e.g., `Baton`, `Configuration`, `HTTPResult`, `countWorker`)
-- **Functions**: PascalCase for exported, camelCase for unexported (e.g., `newWorker()`, `performRequest()`)
+- **Types**: PascalCase (e.g., `Baton`, `Configuration`, `HTTPResult`)
+- **Unexported types**: camelCase (e.g., `worker`, `countWorker`, `timedWorker`)
+- **Functions**: PascalCase for exported, camelCase for unexported (e.g., `newCountWorker()`, `performRequest()`)
 - **Variables**: camelCase (e.g., `numberOfRequests`, `preLoadedRequests`, `connectionErrorCount`)
 - **Constants**: camelCase (e.g., `port = "8888"`)
 
@@ -96,6 +97,7 @@ func startServer() *HTTPTestHandler {
 - File-based requests (`TestPostRequestLoadedFromFile`)
 - Custom headers (`TestThatHeadersAreSetWhenSendingFromFile`)
 - Timing accuracy (`TestThatTimeOptionRunsForCorrectAmountOfTime`)
+- File body loading (`TestLoadPostFromTextFile`)
 
 Run tests with: `go test -v`
 

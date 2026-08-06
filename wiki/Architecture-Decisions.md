@@ -46,6 +46,7 @@ Baton is a load testing orchestrator that coordinates multiple concurrent worker
 **Data structures**:
 - `Baton` (line 47) — Holds configuration and result
 - `runConfiguration` (line 57) — Runtime state (channels, client, requests)
+- `preLoadedRequest` (line 52) — HTTP request template with method, URL, body, headers
 
 ### 2. Worker System (`worker.go`, `count_worker.go`, `timed_worker.go`)
 
@@ -74,13 +75,15 @@ type workable interface {
 **Two implementations**:
 
 1. **CountWorker** (`count_worker.go:22`) — Sends fixed number of requests
-   - Collects timing statistics for each request
+   - Collects timing statistics for each request via `performRequestWithStats()`
    - Used when `-r` flag specifies request count
    - Calls `collectStatistics()` to compute min/max/avg
+   - Stores all response times in memory
 
 2. **TimedWorker** (`timed_worker.go:22`) — Sends requests for a duration
-   - Runs until time expires
+   - Runs until time expires (checked in loop)
    - Used when `-t` flag specifies duration
+   - Calls `performRequest()` without timing collection
    - Does NOT collect per-request statistics (see Known Issues)
 
 ### 3. Configuration (`configuration.go`)
@@ -125,6 +128,7 @@ func preLoadRequestsFromFile(filename string) ([]preLoadedRequest, error)
 **Header parsing** (csv_parsing.go:10):
 - Splits on `:` to extract key-value pairs
 - Handles multiple headers per request
+- Returns nil if header format is invalid
 
 ### 5. Result Aggregation (`result.go`, `http_result.go`)
 
@@ -162,9 +166,10 @@ type Result struct {
 
 **Aggregation** (baton.go:145):
 - Collects results from all workers
-- Sums counters
+- Sums counters across workers
 - Computes min/max/avg response times
 - Calculates percentile buckets (10 brackets)
+- Sets `hasStats` flag based on execution mode
 
 ### 6. Logging (`log_writer.go`)
 
@@ -180,6 +185,7 @@ type logWriter struct {
 **Usage** (baton.go:161):
 - Configured via `-o` flag
 - Allows silent operation for scripting
+- Implements `io.Writer` interface
 
 ## Data Flow
 
@@ -194,16 +200,18 @@ type logWriter struct {
 3. Spawn N workers (N = concurrency)
 4. Each worker:
    - Reads from requests channel
-   - Sends HTTP request
+   - Sends HTTP request via performRequestWithStats()
    - Records timing in timings channel
    - Repeats until requests channel closes
 5. Worker calls collectStatistics():
-   - Reads all timings
-   - Computes min/max/avg
+   - Reads all timings from channel
+   - Converts nanoseconds to milliseconds
    - Skips first request (overhead)
+   - Computes min/max/avg
+   - Stores all timings in responseTimes slice
 6. Worker sends HTTPResult to results channel
 7. Main thread collects all results
-8. Aggregates and prints
+8. Aggregates and prints with statistics
 ```
 
 ### Timed Mode (`-t 10`)
@@ -214,13 +222,13 @@ type logWriter struct {
 3. Spawn N workers
 4. Each worker:
    - Records start time
-   - Sends HTTP requests in loop
-   - Checks elapsed time
+   - Sends HTTP requests in loop via performRequest()
+   - Checks elapsed time each iteration
    - Stops when duration expires
    - Does NOT collect per-request statistics
 5. Worker sends HTTPResult to results channel
 6. Main thread collects results
-7. Aggregates and prints (no per-request stats)
+7. Aggregates and prints (no per-request stats, hasStats=false)
 ```
 
 ## Key Design Decisions
@@ -324,13 +332,13 @@ atomic.AddUint32(&h.noRequestsReceived, 1)
 **Goroutines**: One per worker (default 1, max limited by system).
 
 **Channels**: Three per run:
-- `requests` — Work distribution (buffered)
-- `results` — Result collection (buffered)
-- `done` — Completion signaling (buffered)
+- `requests` — Work distribution (buffered with numberOfRequests)
+- `results` — Result collection (buffered with concurrency size)
+- `done` — Completion signaling (buffered with concurrency size)
 
 **Synchronization**:
-- Main thread waits on `done` channel for all workers
-- Workers send results on `results` channel
+- Main thread waits on `done` channel for all workers (baton.go:130)
+- Workers send results on `results` channel (worker.go:90)
 - No shared memory except channels
 
 **Scalability**: Tested up to 100,000 concurrent requests (baton_test.go:109).
