@@ -275,71 +275,78 @@ if preparedRunConfiguration.timedMode {
 
 ### 5. Response Time Bucketing
 
-**Decision**: Divide response times into 10 percentile brackets.
+**Decision**: Divide response times into 10 fixed brackets for percentile reporting.
 
-**Rationale** (baton.go:175):
+**Implementation** (baton.go:175):
 ```go
 var numOfBrackets = 10
 rtCounts := make([][3]int, numOfBrackets)
 bs := (max - min) / numOfBrackets
 ```
 
-**Benefit**: Summarizes distribution without storing all timings.
+**Benefit**: Simple, fast percentile calculation.
 
-**Trade-off**: Loses precision (see Known Issues).
+**Trade-off**: Loses precision; cannot compute exact p50/p95/p99 (see Known Issues).
 
 ### 6. First Request Timing Exclusion
 
-**Decision**: Skip first request when computing statistics.
+**Decision**: Skip first request's timing statistics to exclude client setup overhead.
 
-**Rationale** (worker.go:73):
+**Implementation** (worker.go:73):
 ```go
-// The first request is associated with overhead
-// in setting up the client so we ignore it's result
 if first {
     first = false
     continue
 }
 ```
 
-**Benefit**: More accurate average (excludes client setup overhead).
+**Rationale**: First request includes TLS handshake, connection setup, etc.
 
-**Trade-off**: Slightly fewer data points.
+**Trade-off**: Slightly fewer data points (N-1 instead of N per worker).
 
-### 7. Atomic Operations for Counters
+### 7. Atomic Operations for Thread Safety
 
-**Decision**: Use `sync/atomic` for test handler counters.
+**Decision**: Use `sync/atomic` for counter updates in tests.
 
 **Rationale** (baton_test.go:42):
 ```go
 atomic.AddUint32(&h.noRequestsReceived, 1)
 ```
 
-**Benefit**: Thread-safe without locks.
-
-**Trade-off**: Only works for simple counters.
+**Benefit**: Lock-free, high-performance counter updates.
 
 ## Concurrency Model
 
-**Goroutines**: One per worker (default 1, max limited by system).
+**Goroutines per worker**: Each worker runs in its own goroutine.
 
-**Channels**: Three per run:
-- `requests` — Work distribution (buffered)
-- `results` — Result collection (buffered)
-- `done` — Completion signaling (buffered)
+**Channel communication**:
+- Main thread sends work via `requests` channel
+- Workers send results via `results` channel
+- Workers signal completion via `done` channel
 
 **Synchronization**:
-- Main thread waits on `done` channel for all workers
-- Workers send results on `results` channel
-- No shared memory except channels
+- Main thread waits for all workers to finish before aggregating results
+- No shared mutable state between workers (each has its own HTTPResult)
 
-**Scalability**: Tested up to 100,000 concurrent requests (baton_test.go:109).
+## Request Execution Flow
+
+1. **CLI Parsing** (baton.go:68-75): Flags converted to Configuration struct
+2. **Validation** (configuration.go:33): Concurrency and request count checked
+3. **Preparation** (baton.go:103): Channels created, CSV loaded if needed
+4. **Worker Spawn** (baton.go:115): N goroutines created, each running worker.sendRequest(s)
+5. **Request Distribution** (baton.go:130): Requests channel filled with N items
+6. **Execution** (worker.go:60): Each worker reads from channel, sends HTTP request
+7. **Timing** (worker.go:48): Response time recorded (count mode only)
+8. **Status Recording** (worker.go:54): HTTP status code categorized
+9. **Aggregation** (baton.go:145): Results collected from all workers
+10. **Output** (result.go:20): Formatted results printed to stdout
 
 ## Error Handling Strategy
 
-1. **Configuration validation** (baton.go:88) — Fail fast before execution
-2. **File parsing errors** (baton.go:93) — Return error with context
-3. **Connection errors** (worker.go:48) — Count as error, continue
-4. **HTTP errors** (worker.go:48) — Count by status code, continue
+**Configuration errors**: Caught early, fail fast with `log.Fatalf()`
 
-**Philosophy**: Resilient to individual request failures, fail only on configuration/setup errors.
+**File I/O errors**: Returned from `prepareRun()`, propagated to main
+
+**HTTP errors**: Counted as connection errors, not fatal
+
+**Channel operations**: Rely on Go's panic for programming errors (e.g., send on closed channel)
