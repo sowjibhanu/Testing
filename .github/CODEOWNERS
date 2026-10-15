@@ -1,0 +1,27 @@
+# Code owners for Baton.
+# Owners listed here are automatically requested for review on pull requests
+# that touch the matching paths. Add developers (or a team such as
+# @org/developers) to grant them review rights over an area of the codebase.
+# See CONTRIBUTING.md -> "Developer Rights" for the role definitions.
+
+# Default owner for everything in the repository
+*                       @sowjibhanu
+
+# Go source and tests
+*.go                    @sowjibhanu
+
+# Dependency management (vendored code and Dep manifests)
+/vendor/                @sowjibhanu
+Gopkg.toml              @sowjibhanu
+Gopkg.lock              @sowjibhanu
+
+# Build and deployment
+Dockerfile              @sowjibhanu
+docker-compose.yml      @sowjibhanu
+
+# Documentation
+*.md                    @sowjibhanu
+/wiki/                  @sowjibhanu
+
+# Repository governance (changes to rights require maintainer review)
+/.github/               @sowjibhanu
